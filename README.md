@@ -1,2 +1,2 @@
 # SomeUnityAddressableManager
-It's just some Addressable Manager for the Unity Game Engine
+It's just some Addressable Manager for the Unity Game Engine. This is essentially a rewrite of a similar Addressable Manager I created for a former project to act as a code sample of my work. The goal of this project specifically is to create an extendable manager to help simplify the process of loading/unloading Addressable Assets. If anyone ends up using this please feel free to leave comments if you run into any issues or if you think it can be optimized in any way. I'll try and address any bugs when I get the chance.
