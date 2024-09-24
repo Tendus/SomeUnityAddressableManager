@@ -1,0 +1,28 @@
+{
+  "name": "com.tendus.addressablemanager",
+  "version": "1.0.0",
+  "displayName": "Some Addressable Manager",
+  "description": "An addressable management framework to help simplify loading/unloading Asset Bundles",
+  "unity": "2021.3",
+  "documenationUrl": "https://github.com/Tendus/SomeUnityAddressableManager",
+  "dependencies": {
+    "com.unity.addressables": "1.19.19",
+    "com.cysharp.unitask": "2.5.5"
+  },
+  "keywords": [
+    "Addressable",
+    "AssetBundle",
+    "Asset Bundle"
+  ],
+  "author": {
+    "name": "Tendus",
+    "url": "https://github.com/Tendus"
+  },
+  "samples": [
+	{
+		"displayName": "Simple Loading Sequence",
+		"description": "A Sample scene that uses a simple Loading Sequence to load in the character models",
+		"path": "Samples~/SimpleLoading"
+	}
+  ]
+}
