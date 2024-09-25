@@ -6,7 +6,11 @@ It is recommended to install via the Github URL (https://docs.unity3d.com/Manual
 * Install CySharp's UniTask package: https://github.com/Cysharp/UniTask
   * SomeUnityAddressableManager's async functions are all built as UniTask functions as it's more Unity Garbage Collection-friendly compared to normal C# aysnc Tasks
 * Install this package: (install via Github URL: https://github.com/Tendus/SomeUnityAddressableManager.git)
-It is recommended to also at least take a look at the provided Sample: "Simple Loading Sequence" (you can install via PackageManager) as it provides a very basic example of how the Full Init load sequence can be implemented
+
+### Next Steps
+* Go over the Design Philosophy section for an extensive overview on why "Some Unity Addressable Manager" is setup the way it is.
+* If that's too daunting or you just need something to handle Addressables check out the "Simple Addressable Manager" section for how to set one of those up.
+* I'd also recommend at least taking a look at the provided Sample: "Simple Loading Sequence" (you can install via PackageManager) as it provides a very basic example of how the Full Init load sequence can be implemented.
 
 ## Design Philosophy
 ### Former Setup
@@ -50,8 +54,12 @@ The most straightforward way to explain how the Dynamic works is:
   * Tell the AssetLink to Release the Asset, and delete the AssetLink
   * or leave the AssetLink in the Cache
 
-The following sections go more into how each individual portion of this dynamic is setup, but the gist is Settings sets the Rules, Manager uses the Rules to manage the AssetLinks, AssetLinks handle the actual data.
+The following sections go more into how each individual portion of this dynamic is setup, but the gist is Settings sets the Rules, Manager uses the Rules to manage the AssetLinks, AssetLinks handle the actual data. Something you'll notice reading through those sections is that role is usually split among three different levels of class inheritence:
+* A Base class: Will usually handle the most basic functionality along with defining abstract functions to be overridden by child classes. I try to set these up with an almost interface-based approach, where the Base class defines the jobs that need to be done and it's up the Template and Implementation classes to override and deliver on what those jobs do so that the act of swapping between different Implementations should't fully break the existing setups. There are exceptions of course, some intended to keep the Base class from getting too bloated, but that's the general intention of the Base class.
+* A Template class: A class dependent on all needed generic references. Will usually override as much of the Base class's abstract definitions as it can to help keep the Implemenatation class focused on more project-specific code.
+* An Implementation class: a class that fills out the generic types of the Template class and defines the code unique to the project the AddressableManager is being used in. Depending on the Role we're trying to fill with this specific Base/Template/Implementation setup, I usually try to set these up in a way to where a dev only has to define the Implemenation as child of the Template and pass the classes that fill the generic types out with minimal additional code needed.
 
+With that explained, an overview of the full "Some Unity Addressable Manager" system:
 #### The Manager
 * The Base class: "AddressableManager": Implements the core functionality either itself or by defining what child classes need to implement through abstract functions.
   * Handles the Internal Loading/Unloading functionality.
@@ -81,7 +89,7 @@ The following sections go more into how each individual portion of this dynamic 
   * The reason for this is the Settings Implementation exists almost exclusively to pass data to the Manager Implementation class, and provide devs a way to expose the options that actually modify that specific Manager Implementation
     * Fields that would normally be part of the Manager Implementation are instead defined and set here, so it's easy slot in different Settings objects if needed
     * I considered filling out the Template class with some super basic options but ultimately decided against it since it'd 1) make the Inspector a little less organized, 2) would've introduced a point of rigidity (Can't change the option without changing the object, when we may want the option to change based on some other variable). Everytime I considered it, I thought of the Implementation class being strongarmed into behaving a certain way when the Settings Implementation class should be the least limited in how it has to be setup
-  * "SimpleAddressableManagerSettingsBase" and it's child classes "SimpleAddressableManagerSettings" and "SimpleAddressableManagerSettings_Dynamic" exist as a basic implementation of this that can extended or used as-is
+  * "SimpleAddressableManagerSettingsBase" and it's child classes "SimpleAddressableManagerSettings" and "SimpleAddressableManagerSettings_Dynamic" exist as a basic implementation of this that can extended or used as-is.
 
 #### The AssetLink
 * The Base class: "AssetRefLink": Handles the Load and Release functionality of the Asset itself
@@ -92,3 +100,67 @@ The following sections go more into how each individual portion of this dynamic 
 * The Implementation class: "YourAssetRefLink": Handles Request tracking by oerriding abstract functions defined in Base class, along with defining any additional wanted data
   * Template class not really needed for this as the AssetLink doesn't directly reference the Manager or Settings classes at all. It wholly responsible for itself. The original draft of the dynamic didn't include it as it was just considered part of the Manager. I wanted to allow extending the Base though to whoever would want to override the Requester tracking
   * "SimpleAssetRefLink" exists as a very basic implementation of this that can extended or used as-is
+
+## The Simple Addressable Manager
+While all the Base/Template/Implementation stuff is fun "middle-level" management code that I'm certain everyone reading this wants to extend and play with, you can just use the SimpleImplementation provided with the package to handle all the Addressable Management stuff without the hassle of setting up any additional (implementation) code yourself. This section is a quick overview of the SimpleImplementation of the AddressableManager. For each system section, the 1st bullet point will be on how to set it up to run the project, with the following points explaining import functions and points of interest:
+
+### Implementation Design overview
+* AssetLink stores Requesters' RequestID, and acts as empty if none are stored. It also stores a numeric Priority score to be used in a future build.
+* Settings Enables Autocaching if the Device's SystemMemory is above a certain threshold, otherwise it leaves it disabled. I also allows tying what can be PreCached to SystemMemory as well through a numeric Priority score.
+
+#### SimpleAddressableManager
+* Add the component "SimpleAddressableManager" to a GameObject in your scene. It will handle turning itself into a singleton, and all that comes with it.
+ * Consider setting up a "Boot" prefab or something like it that you can throw into every scene and will destroy itself if it's not the 1st of it's kind (Look into AddressableManager<M,S,A>.Awake() for an example of how to do this).
+  * You can also spawn a singleton from the Settings, but we'll get there when we get to the Settings.
+ * Has DoAutoCache bool that determines whether or not the AssetLinks should remain in the cache after all their Requesters have finished using them.
+ * Has LoadAsset wrapper functions that allowing passing a Priority score value, to be implemented in a future build.
+ * Includes UpdateAssetRefPriority function to update that value if it needs to be updated per Requester.
+ * Most of the code exists in a Template class: "SimpleAddressableManagerSettingsTemplate<M,S,A>" for specific reason being that if you want to extend this code at all you can just inherit from that class.
+
+#### SimpleAddressableManagerSettings
+* Somewhere in your Project's folder heirarchy, RightClick -> Create -> Some/AddressableManager/SimpleSettings. Fill it out as desired and reference via the SimpleAddressableManager component you created in the former section.
+ * If you want the Settings to create the Manager rather than the other around, you can write a wrapper for AddressableManager.CreateManagerSingleton in your own implementation to be called by whatever Game Init/Boot sequence you have setup.
+  * Looking at it now I might need to write that function. I'll try to include that in a future build.
+ * There is a also a "Dynamic" Settings object you can create as well (DynamicSettings) that will select the BuildConfig to use based on the current Device and its SystemInfo that is running the Game.
+ * For the most part I've tried to add Tooltip for every variable that isn't immediately self-explanatory, so I'm skipping the nitty-gritty for just q uick high-level explanation of the important bits:
+  * BuildConfig: Is used to determine if we want to enable AutoCaching for basic Settings, For the Dynamic settings this returns a Priority score that is used to determine which Labels/Addressables to PreCache.
+  * Remote Options: "HasRemoteAddressables", "RemoteAssetLoadPath", and "DownloadAssetLabels": Ignore these if you aren't distributing the AssetBundles over a CDN.
+  * PreCache Assets/Labels: Define what we should precache into our AddressableManager. any Settings objects we want to treat as Addressables should be included here. As mentioned above using a Dynamic Settings object we can limit what gets PreCached.
+ * Included GetNeededDownloadSizeAsync function that can be called Externally if you want to display the size of the Download needed (assuming one is needed, a return of 0, says "none")
+ * Included DownloadBundlesAsync function that can be called Externally if you want to seperate the Download sequence from the Init sequence (you should if you are doing Remote assets)
+ * Included CacheBundlesAsync function that can be called Externally if you want to seperate the PreCache sequence from the Init sequence (it should come after Download but you aren't using Remote assets it doen't really matter)
+ * Similar to the SimpleAddressableManager, most of the code exists in a Template class: "SimpleAddressableManagerSettingsTemplate<M,S,A>". Unlike the Manager there is an abstract class right below to help simplify the Simple and Dynamic implementations into 1 reference type: "SimpleAddressableManagerSettingsBase". You can override that with your own Implementation if you like and it'll supply all the data the Manager needs so long as you override the abstract function.
+
+#### SimpleAssetRefLink:
+* No additional work is needed, it is implemented as part of the SimpleAddressableManager's inheritence of the Template class
+* Includes Priority score value to be implemented in the future, currently returns the max score between all Requesters and it's default Priority score
+* Stores Requesters as a Dictionary lookup of RequestID:Priority score, empty dictionary = no Requesters
+
+### Additional Helper Classes
+#### SimpleObjectReference
+Acts as a very basic in-Scene instance of an Object to be loaded at runtime. Includes settable UnityEvent for in-scene simple callbacks and overridable "Set" and "Clear" functions for extended versions of this base class. A quick rundown of extendend versions already included as part of the SimpleImplementation:
+* SimpleGameObjectReference: Can set Transform parent for the Object to be spawned onto. Will Instantiate a copy of the LoadedAsset as part of the "Set" call, and delete said copy on "Clear"
+* TODO: Add more Reference classes
+
+## Setting up Samples
+A quick overview of how to go about setting up and implementing samples as well what's worth looking at just to look at it. At the moment there is just the one, but if anyone needs an example of a spefic feature I can look adding it to the list. (Side note: I also do a bit more research into including addressable settings as part of the package, you'll need to modify the "Groups" but it's really simple and easy and included below)
+
+### Simple Loading Sequence
+TODO: expand upon sample explanation
+On how to get it to work:
+* Set "DownloadAssets" folder as addressables (Select the folder from the Project view, enable the tickbox "Addressable"
+* Go to AddressableGroups and add a "Download" Label (Window -> AssetManagement -> AddressableGroups. Then in that window: Tools -> Windows -> Labels. Add the Label)
+* In the Groups window, find the folder we marked "Addressable" and under Labels, enable the newly created "Download" label
+* That's all that is required to get it to run! Keep reading for how to enable proper reading from built AssetBundles
+* Build the AssetBundles (in the Groups window, Build -> New Build -> Default Build Script. Ignore the other options for now those are for way more advanced functionality than what is needed to run this sample)
+* Set the "Play Mode Script" to "Use Existing Build" (we are still in the Groups window)
+* Congratulations! Remote loading is bit tricker, and you are responsible for finding your own CDN
+* TODO: Add instructions for Remote loading
+
+## On My TODO list:
+A List of changes I want to make and features I want to add in the future
+* Setup SimpleAddressableManager's Priority system, allowing Autocaching above a certain threshold
+* Setup a Catalog system to load in Assets based on defined lookup parameters (less by players, more by code and settings)
+* Look into feasibility of hosting a Remote Distribution Sample, DDOS scares my poor empty wallet
+* Add more ObjectReferences in general
+* All the TODO lines in the project's code itself
