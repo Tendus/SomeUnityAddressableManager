@@ -48,6 +48,7 @@ namespace Some.Utility.AddressableManager
         }
 
         protected abstract System.Type GetManagerType();
+        public abstract bool TryCreateManagerFromSettings();
 #endregion
     }
 
@@ -55,5 +56,13 @@ namespace Some.Utility.AddressableManager
     {
         protected override System.Type GetManagerType() { return typeof(M); }
         public static M GetManagerInstance() { return AddressableManager.BaseInstance as M; }
+
+        public override bool TryCreateManagerFromSettings()
+        {
+            if (AddressableManager.HasInstance)
+                return false;
+
+            return CreateManagerSingleton() is M;
+        }
     }
 }
