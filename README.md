@@ -37,7 +37,7 @@ The former "Addressable Manager" was created for an idle crafting-focused mobile
 
 To achieve all this I created a few types of scripts to help handle the Addressables:
 * The "AssetBundleBridge" script to act as the primary manager. It would handle the Loading/Unloading of the assets and Cache the Loaded AssetReferences into a dictionary lookup if applicable
-  * Preloading would be done on all Settings object, and would be extended to the character portraits if the device had enough memory support this
+  * Preloading would be done on all GameSettings objects, and would be extended to the character portraits if the device had enough memory support this
   * Autocaching was a toggle that would allow Loaded assets to stay in the Cache even after the Unload. This toggle would also only be allowed for devices with enough memory
 * ObjectReference component scripts that would call the AssetBundleBridge's Load/Unload functions automatically and handle the returned loaded asset as each was designed
   * As an example the CharacterReference would Instantiate a GameObject model from the loaded asset, parent it to itself, and set the visual elements needed. When it was time to Unload the asset it would destroy the Instantiated GameObject. The Load/Unload calls would be made as the CharacterReference's GameObject was enabled/disabled
