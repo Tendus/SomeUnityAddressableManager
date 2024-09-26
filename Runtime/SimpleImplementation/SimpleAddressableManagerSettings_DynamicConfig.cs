@@ -18,6 +18,8 @@ namespace Some.Utility.AddressableManager.Simple
         [SerializeField] private bool m_hasRemoteAddressables = true;
         [Tooltip("For if you want to define the URL as part of these Settings instead of the Profile Settings. It it referenced thru \"{Some.Utility.AddressableManager.Paths.BaseLoadURL}\"")]
         [SerializeField] private string m_remoteAssetLoadPath = "Insert.Your.CDN.URL.Here";
+        [Tooltip("What is the Priority Level at which an asset is required to remain in the cache?")]
+        [SerializeField] private int m_priorityThresholdRequiredAssets = 100;
         [Tooltip("Define which Addressables should be downloaded as part of the \"Download\" sequence, you can define these Labels in the Addressable Groups menu")]
         [SerializeField] private string[] m_downloadAssetLabels = new string[0];
         [Tooltip("For defining which Assets should be precached. A Priority score is taken from the BuildConfig used for the user's system and anything with a higher priority than that will be preloaded during the \"Precache\" sequence")]
@@ -62,6 +64,7 @@ namespace Some.Utility.AddressableManager.Simple
         protected override string RemoteLoadBasePath() { return m_remoteAssetLoadPath; }
         protected override string[] GetDownloadAssetLabels() { return m_downloadAssetLabels; }
 
+        protected override int PriorityThreshold_RequiredAssets => m_priorityThresholdRequiredAssets;
         protected override List<AssetReference> GetPrecacheAssetReferences()
         {
             List<AssetReference> assetRefs = new List<AssetReference>();
@@ -201,7 +204,7 @@ namespace Some.Utility.AddressableManager.Simple.SettingsClasses
         [Tooltip("For more general Labels, you can define these in the Addressable Groups menu to simplify preloading sets of assets")]
         [SerializeField] private string[] m_assetBundlesToLoad = new string[] { "Preload" };
 
-        public bool IsValid(int priority) { return m_precacheAssetsPriority <= priority; }
+        public bool IsValid(int priority) { return m_precacheAssetsPriority >= priority; }
         public UnityEngine.AddressableAssets.AssetReference[] AssetReferencesToLoad => m_assetReferencesToLoad;
         public string[] AssetBundlesToLoad => m_assetBundlesToLoad;
     }

@@ -257,6 +257,7 @@ namespace Some.Utility.AddressableManager
         public bool IsLoadOpValid => m_ref != null && m_ref.IsValid();
 
         public AssetReference AssetReference => m_ref;
+        public string AssetGUID => m_ref != null ? m_ref.AssetGUID : System.Guid.Empty.ToString();
         public Object LoadedObject => m_ref != null ? m_ref.Asset : null;
         public bool Locked => m_locked;
         public abstract bool HasRequests { get; }
@@ -679,7 +680,7 @@ namespace Some.Utility.AddressableManager
                 for (int i = 0; i < assetReferences.Length; i++)
                 {
                     AssetReference assetReference = assetReferences[i];
-                    AssetRefLink link = ValidateAssetLink(assetReference, null);
+                    AssetRefLink link = ValidateAssetLink(assetReference, this);
                     while (link.Locked)
                         await UniTask.DelayFrame(1);
 
@@ -930,7 +931,11 @@ namespace Some.Utility.AddressableManager
 
             if (m_settings != null)
                 ApplySettings(m_settings);
+
+            Application.lowMemory += HandleLowMemoryWarning;
         }
+
+        protected virtual void OnDestroy() { if (HasInstance && BaseInstance == this) { ReleaseAllAssets(); Application.lowMemory -= HandleLowMemoryWarning; } }
 
         //sealed because child classes should only be overriding the templated version, this base function is just a glorified wrapper to make it easier on the parent class
         public sealed override AssetRefLink ValidateAssetLink(AssetReference assetRef, IAssetRequest requester, bool createIfNull = true) { return ValidateTemplatedAssetLink(assetRef, requester, createIfNull); }
@@ -1015,16 +1020,22 @@ namespace Some.Utility.AddressableManager
             List<string> allKeys = new List<string>(LoadedAssets.Keys);
             foreach (string key in allKeys)
                 LoadedAssets[key].ReleaseAsset();
+
+            LoadedAssets.Clear();
         }
 
-        protected override void ReleaseAsset(AssetReference assetRef)
+        //sealed to put all functionality into the 1 function
+        protected sealed override void ReleaseAsset(AssetReference assetRef) { ReleaseAsset(assetRef.AssetGUID, ValidateTemplatedAssetLink(assetRef, null, false)); }
+        protected void ReleaseAsset(A assetLink) { ReleaseAsset(assetLink.AssetGUID, assetLink); }
+        protected virtual void ReleaseAsset(string guid, A assetLink)
         {
-            A link = ValidateTemplatedAssetLink(assetRef, null, false);
-            if (link != null)
-                link.ReleaseAsset();
+            if (assetLink != null)
+                assetLink.ReleaseAsset();
 
-            LoadedAssets.Remove(assetRef.AssetGUID);
+            LoadedAssets.Remove(guid);
         }
+
+        protected abstract void HandleLowMemoryWarning();
     }
     #endregion
 

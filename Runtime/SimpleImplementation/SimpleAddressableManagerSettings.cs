@@ -20,9 +20,12 @@ namespace Some.Utility.AddressableManager.Simple
         [Tooltip("For if you want to define the URL as part of these Settings instead of the Profile Settings. It it referenced thru \"{Some.Utility.AddressableManager.Paths.BaseLoadURL}\"")]
         //You can find more info on Loading through custom path variables: https://docs.unity3d.com/Packages/com.unity.addressables@1.20/manual/AddressableAssetsProfiles.html#profile-variable-syntax
         [SerializeField] private string m_remoteAssetLoadPath = "Insert.Your.CDN.URL.Here";
+        [Tooltip("What is the Priority Level at which an asset is required to remain in the cache?")]
+        [SerializeField] private int m_priorityThresholdRequiredAssets = 100;
         [Tooltip("Define which Addressables should be downloaded as part of the \"Download\" sequence, you can define these Labels in the Addressable Groups menu")]
         [SerializeField] private string[] m_downloadAssetLabels = new string[] { "Download" };
-        [Tooltip("For specific AssetReferences, if you have Settings Objects that need to be loaded first here is where to reference them")]
+        //TODO: revisit and add settable priority per assetreference/label
+        [Tooltip("For specific AssetReferences, if you have Settings Objects that need to be loaded first here is where to reference them. These direct references will be marked as \"Required\" and will not be unloaded")]
         [SerializeField] private AssetReference[] m_precacheAssets = new AssetReference[0];
         [Tooltip("For more general Labels, you can define these in the Addressable Groups menu to simplify preloading sets of assets")]
         [SerializeField] private string[] m_precacheAssetLabels = new string[] { };
@@ -37,6 +40,7 @@ namespace Some.Utility.AddressableManager.Simple
         protected override string RemoteLoadBasePath() { return m_remoteAssetLoadPath; }
         protected override string[] GetDownloadAssetLabels() { return m_downloadAssetLabels; }
 
+        protected override int PriorityThreshold_RequiredAssets => m_priorityThresholdRequiredAssets;
         protected override List<AssetReference> GetPrecacheAssetReferences() { return new List<AssetReference>(m_precacheAssets); }
         protected override List<string> GetPrecacheAssetLabels() { return new List<string>(m_precacheAssetLabels); }
 
@@ -67,6 +71,7 @@ namespace Some.Utility.AddressableManager.Simple
         protected abstract string RemoteLoadBasePath();
         protected abstract string[] GetDownloadAssetLabels();
 
+        protected abstract int PriorityThreshold_RequiredAssets { get; }
         protected virtual List<AssetReference> GetPrecacheAssetReferences() { return new List<AssetReference>(); }
         protected virtual List<string> GetPrecacheAssetLabels() { return new List<string>(); }
         protected abstract bool ShouldEnableAutoCaching();
@@ -81,6 +86,7 @@ namespace Some.Utility.AddressableManager.Simple
             bool hasInit = true;
             BuildConfigBase buildConfig = GetConfig();
 
+            SimpleAddressableManager.CachePriority_Required = PriorityThreshold_RequiredAssets;
             Paths.BaseLoadURL = RemoteLoadBasePath();
             if (HasRemoteAddressables())
             {
@@ -147,7 +153,7 @@ namespace Some.Utility.AddressableManager.Simple
                 if (seqTracker != null)
                     seqTracker.OnStartAssetCachingCycle(cacheRefs);
 
-                cachingComplete = await GetManagerInstance().PrecacheBundlesAsync(tracker, cacheRefs);
+                cachingComplete = await GetManagerInstance().PrecacheBundlesAsync(tracker, PriorityThreshold_RequiredAssets, cacheRefs);
 
                 if (seqTracker != null)
                     seqTracker.OnCompleteAssetCachingCyle(totalSequences);
@@ -166,7 +172,7 @@ namespace Some.Utility.AddressableManager.Simple
                 if (seqTracker != null)
                     seqTracker.OnStartAssetCachingCycle(cacheBundleLabels);
 
-                cachingComplete = await GetManagerInstance().PrecacheBundlesAsync(tracker, cacheBundleLabels);
+                cachingComplete = await GetManagerInstance().PrecacheBundlesAsync(tracker, SimpleAddressableManager.CachePriority_Default, cacheBundleLabels);
 
                 if (seqTracker != null)
                     seqTracker.OnCompleteAssetCachingCyle(totalSequences);

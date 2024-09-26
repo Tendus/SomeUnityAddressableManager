@@ -59,6 +59,9 @@ namespace Some.Utility.AddressableManager.Simple
         where S : SimpleAddressableManagerSettingsTemplate<M,S,A> 
         where A : SimpleAbstractAssetRefLink
     {
+        public const int CachePriority_Default = 0;
+        public static int CachePriority_Required { get; set; } = 100;
+
         public bool DoAutoCacheBundlesInMemory { get; set; }
 
         protected override async UniTask<bool> InitSelfAsync()
@@ -80,12 +83,47 @@ namespace Some.Utility.AddressableManager.Simple
             return base.ApplySettings(settings);
         }
 
-        //public wrappers for the internal Load functions
-        public override AssetRefLink LoadAsset(AssetReference assetRef, IAssetRequestCallback requester) { return LoadAsset(assetRef, requester, 0); }
-        public AssetRefLink LoadAsset(AssetReference assetRef, IAssetRequestCallback requester, int priority) { UpdateAssetRefPriority(assetRef, requester, priority, true); return LoadAssetInternal(assetRef, requester); }
-        public async UniTask<Object> LoadAssetAsync(AssetReference assetRef, IAssetRequestCallback requester, int priority = 0)
+        //public wrappers for caching functions
+        public sealed override UniTask<bool> PrecacheBundlesAsync(ITrackAssetCaching progressTracker, params AssetReference[] assetReferences) { return PrecacheBundlesAsync(progressTracker, CachePriority_Default, assetReferences); }
+        public virtual async UniTask<bool> PrecacheBundlesAsync(ITrackAssetCaching progressTracker, int priority, params AssetReference[] assetReferences)
         {
-            UpdateAssetRefPriority(assetRef, requester, priority, true);
+            UpdateAssetLinksPriority(this, priority, true, assetReferences);
+            bool ret = await base.PrecacheBundlesAsync(progressTracker, assetReferences);
+
+            return ret;
+        }
+
+        public sealed override UniTask<bool> PrecacheBundlesAsync(ITrackAssetCaching progressTracker, params string[] bundleIds) { return PrecacheBundlesAsync(progressTracker, CachePriority_Default, bundleIds); }
+        //need to essentially copy/paste the full precache function from the base class for optimization, at least for now, may revisit and simplify the neccessary functions later
+        public virtual async UniTask<bool> PrecacheBundlesAsync(ITrackAssetCaching progressTracker, int priority, params string[] bundleIds)
+        {
+            PreCachingStatus.OnStart();
+
+            AssetCacheProgress progressData = AssetCacheProgress.Create(AssetCacheProgress.State.RetrievingCatalog, bundleIds);
+
+            //Before precaching we need to get a list of all the assetguids to create the asset refs for the AssetRefLinks
+            List<string> allGuids = await CacheFunc_RetrieveGUIDsFromBundleIdsAsync(progressData, progressTracker, bundleIds);
+            AssetReference[] refParams = new AssetReference[allGuids.Count];
+            for (int i = 0; i < allGuids.Count; i++)
+                refParams[i] = allGuids[i].GUIDtoAssetReference();
+
+            UpdateAssetLinksPriority(this, priority, true, refParams);
+
+            progressData.OnRetrieveCatalog(progressTracker, allGuids);
+
+            //now we just run the precaching function as normal
+            progressData = await CacheFunc_PrecacheAssetReferences(progressData, progressTracker, refParams);
+
+            PreCachingStatus.OnComplete();
+            return progressData.state == AssetCacheProgress.State.Completed;
+        }
+
+        //public wrappers for the internal Load functions
+        public sealed override AssetRefLink LoadAsset(AssetReference assetRef, IAssetRequestCallback requester) { return LoadAsset(assetRef, requester, CachePriority_Default); }
+        public AssetRefLink LoadAsset(AssetReference assetRef, IAssetRequestCallback requester, int priority) { UpdateAssetLinkPriority(assetRef, requester, priority, true); return LoadAssetInternal(assetRef, requester); }
+        public async UniTask<Object> LoadAssetAsync(AssetReference assetRef, IAssetRequestCallback requester, int priority = CachePriority_Default)
+        {
+            UpdateAssetLinkPriority(assetRef, requester, priority, true);
             var loadHandle = await LoadAssetInternalAsync(assetRef, requester);
 
             if (loadHandle.IsAssetLoaded)
@@ -94,16 +132,38 @@ namespace Some.Utility.AddressableManager.Simple
                 return null;
         }
 
-        public void UpdateAssetRefPriority(AssetReference assetRef, IAssetRequestCallback requester, int priority, bool createIfNull = true)
+        public void UpdateAssetLinkPriority(AssetReference assetRef, IAssetRequest requester, int priority, bool createIfNull = true)
         {
             SimpleAbstractAssetRefLink refLink = ValidateTemplatedAssetLink(assetRef, requester, createIfNull);
             if(refLink != null)
                 refLink.SetPriority(requester, priority);
         }
 
+        public void UpdateAssetLinksPriority(IAssetRequest requester, int priority, bool createIfNull, params AssetReference[] assetRefs)
+        {
+            foreach (AssetReference assetRef in assetRefs)
+                UpdateAssetLinkPriority(assetRef, requester, priority, createIfNull);
+        }
+
         //Autocaching logic implementation
         protected override bool PostLoadCheck_AssetLoadStillRequired(AssetReference assetRef) { return DoAutoCacheBundlesInMemory || base.PostLoadCheck_AssetLoadStillRequired(assetRef); }
         protected override bool ShouldReleaseAsset(AssetRefLink refLink) { return !DoAutoCacheBundlesInMemory && base.ShouldReleaseAsset(refLink); }
+
+        //clear away unneccesary caches, and disable autocaching as a default reaction to Memory warnings, would like to expand in the future but this is fine for now
+        protected override void HandleLowMemoryWarning()
+        {
+            DoAutoCacheBundlesInMemory = false;
+            List<string> allKeys = new List<string>(LoadedAssets.Keys);
+            foreach (string key in allKeys)
+            {
+                if (LoadedAssets[key].Priority < CachePriority_Required)
+                {
+                    LoadedAssets[key].DelinkRequestID(this);
+                    if (!LoadedAssets[key].HasRequests && LoadedAssets[key].IsAssetLoaded)
+                        ReleaseAsset(LoadedAssets[key]);
+                }
+            }
+        }
 
         //TODO: Expand on Debug visuals and options, I like having a full HUD display of whats going on and part of why I'm making this project was to eventually do that with AssetRefLink tracking
         private void OnGUI()
