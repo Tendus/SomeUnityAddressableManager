@@ -15,6 +15,7 @@ It is recommended to install via the Github URL (https://docs.unity3d.com/Manual
 ## Design Philosophy
 ### Former Setup
 The former "Addressable Manager" was created for an idle crafting-focused mobile game with a strict APK size limit we couldn't go over. Because of this I was asked to handle setting up the Addressables not only to get our build size down but also to try and get our memory overhead as low as possible. For a quick general breakdown of the development needs for this Manager:
+* Needs to Preload and Cache all Item and Character data 
 * Needs to Load/Unload high quality character portraits on specific menus.
 * Needs to Load/Unload multiple visual novel style thumbnails for past dialogue events.
 * Needs to Load/Unload vehicle models and sprites dependent on vehicle level and player customization options.
@@ -22,7 +23,7 @@ The former "Addressable Manager" was created for an idle crafting-focused mobile
 * Needs to account for the active player's Device performance/specification.
   * Autocaching and Preloading was setup specifically for this, so if the game is running on a semi-decent phone it would help remove the load times for certain menus.
   * The crowning achievement for this whole setup was learning that someone was able to play our game on a phone with only 2GB of RAM.
-* The ability to wholly seperate the Characters and Events from the built Game so we can push updates for them not through a new build of the game but by simply updating the Asset Bundles on our CDN (Content Delivery Network).
+* The ability to wholly seperate the Items, Characters, and Events from the built Game so we can push updates for them not through a new build of the game but by simply updating the Asset Bundles on our CDN (Content Delivery Network).
 
 To achieve all this I created a few types of scripts to help handle the Addressables:
 * The "AssetBundleBridge" script to act as the primary manager. It would handle the Loading/Unloading of the assets and Cache the Loaded AssetReferences into a dictionary lookup if applicable
@@ -37,8 +38,8 @@ To achieve all this I created a few types of scripts to help handle the Addressa
 ### Some Addressable Manager Setup
 The pitfall of setting up anything for a specific project, especially one with a tiny development team and a harsh deadline, is that the resulting code is usually fairly rigid. It exists for that project only and it can be unwieldy to try and extend to other projects. While some of the underlying structure is still viable (The way loading, unloading, and caching is handled is solid IMO), most of the surrounding code needs to be torn down and rebuilt with scalability in mind. To that end I split the duties of the AddressableManager into the following system dynamic:
 * Manager: Exists in the Game on it's own GameObject. Exposes the Load and Unload functionality as well as handles the Caching. Most External calls/needs from code and the Game at large should go through the Manager.
-* Settings: Exposes what should be customizable of the Manager to the Developer. Should be where developers define the parameters and threholds for caching to function. Should only expose Init sequence calls to External functions
-* AssetLink: The "Block" of cached data that actually holds to the loaded asset. Handles the actual Load and Unload calls. Is expected to keep track of what has requested it's Asset
+* Settings: Exposes what should be customizable of the Manager to the Developer. Should be where developers define the parameters and thresholds for caching to function. Should only expose Init and other service sequence calls to External functions
+* AssetLink: The "Block" of cached data that actually holds the link to the loaded asset. Handles the actual Load and Unload calls. Is expected to keep track of what has requested it's Asset
 
 The most straightforward way to explain how the Dynamic works is:
 * On Init, The Manager asks the Settings "What are the Caching rules?"
@@ -54,7 +55,7 @@ The most straightforward way to explain how the Dynamic works is:
   * Tell the AssetLink to Release the Asset, and delete the AssetLink
   * or leave the AssetLink in the Cache
 
-The following sections go more into how each individual portion of this dynamic is setup, but the gist is Settings sets the Rules, Manager uses the Rules to manage the AssetLinks, AssetLinks handle the actual data. Something you'll notice reading through those sections is that role is usually split among three different levels of class inheritence:
+The following sections go more into how each individual portion of this dynamic is setup, but the gist is Settings sets the Rules, Manager uses the Rules to manage the AssetLinks, AssetLinks handle the actual data. Something you'll notice reading through those sections is that each role is usually split among three different levels of class inheritence:
 * A Base class: Will usually handle the most basic functionality along with defining abstract functions to be overridden by child classes. I try to set these up with an almost interface-based approach, where the Base class defines the jobs that need to be done and it's up the Template and Implementation classes to override and deliver on what those jobs do so that the act of swapping between different Implementations should't fully break the existing setups. There are exceptions of course, some intended to keep the Base class from getting too bloated, but that's the general intention of the Base class.
 * A Template class: A class dependent on all needed generic references. Will usually override as much of the Base class's abstract definitions as it can to help keep the Implemenatation class focused on more project-specific code.
 * An Implementation class: a class that fills out the generic types of the Template class and defines the code unique to the project the AddressableManager is being used in. Depending on the Role we're trying to fill with this specific Base/Template/Implementation setup, I usually try to set these up in a way to where a dev only has to define the Implemenation as child of the Template and pass the classes that fill the generic types out with minimal additional code needed.
@@ -119,8 +120,7 @@ While all the Base/Template/Implementation stuff is fun "middle-level" managemen
 
 #### SimpleAddressableManagerSettings
 * Somewhere in your Project's folder heirarchy, RightClick -> Create -> Some/AddressableManager/SimpleSettings. Fill it out as desired and reference via the SimpleAddressableManager component you created in the former section.
- * If you want the Settings to create the Manager rather than the other around, you can write a wrapper for AddressableManager.CreateManagerSingleton in your own implementation to be called by whatever Game Init/Boot sequence you have setup.
-  * Looking at it now I might need to write that function. I'll try to include that in a future build.
+ * If you want the Settings to create the Manager rather than the other around, you can call the "TryCreateManagerFromSettings" function from your Settings Object. It returns true if a Manager singleton doesn't already exist and it successfully creates a Manager singleton of the correct type
  * There is a also a "Dynamic" Settings object you can create as well (DynamicSettings) that will select the BuildConfig to use based on the current Device and its SystemInfo that is running the Game.
  * For the most part I've tried to add Tooltip for every variable that isn't immediately self-explanatory, so I'm skipping the nitty-gritty for just q uick high-level explanation of the important bits:
   * BuildConfig: Is used to determine if we want to enable AutoCaching for basic Settings, For the Dynamic settings this returns a Priority score that is used to determine which Labels/Addressables to PreCache.
